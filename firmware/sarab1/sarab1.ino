@@ -65,6 +65,8 @@ float noiseLevel = 0, agcPct = 0; int jamInd = 0;
 // ---------------- Detection state ----------------
 enum State { NOMINAL, SUSPECT, JAMMING, SPOOFING };
 const char* STATE_NAME[] = { "NOMINAL", "SUSPECT", "JAMMING", "SPOOFING" };
+struct Det { float drop, mean, sd, r, dev; int n, index; };   // one second's detection result; declared up here because the
+                                                              // Arduino build puts function prototypes before the first function
 State state = NOMINAL;
 bool calibrated = false; uint32_t calStart = 0; int calCount = 0, posCount = 0;
 double homeLat = 0, homeLon = 0; float baseNoise = 100, baseAgc = 58, baseJam = 8;
@@ -211,7 +213,6 @@ static void readMotion(bool fullRead) {
 }
 
 // =============== Detection (same maths as the ground station) ===============
-struct Det { float drop, mean, sd, r, dev; int n, index; };
 static Det detect() {
   Det d = { 0, 0, 0, 0, lastDev, 0, 0 };
   bool replay = millis() < replayUntil;
