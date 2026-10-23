@@ -14,6 +14,7 @@ Team CodeBusters · Al Ain University · SatForge UAE 2026
 | `model.html` | Interactive 3D model of the prototype with exploded view, part callouts and the foam cut list |
 | `src/` | Dashboard code (plain ES modules, no build step) |
 | `firmware/sarab1/sarab1.ino` | ESP32 flight software |
+| `firmware/sarab1_tinkercad/` | Tinkercad Circuits model of the flight software: an Arduino Uno stands in for the ESP32, two potentiometers for the GPS receiver (signal strength and noise) and a switch for the spoofing replay test; same detection maths and thresholds |
 | `hardware/build_model.py` | Single source of truth for the mechanical design; writes the part list (`src/parts-data.js`) and the Tinkercad STL files |
 | `hardware/stl/` | STL files for Tinkercad, one per colour group, plus a merged assembly |
 | `hardware/blender/` | Detailed Blender model built from the same part list: `build_sarab1.py` (model and website export), `render_sarab1.py` (studio renders), `textures.html` (board prints, labels and decal) |
