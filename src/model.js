@@ -121,27 +121,35 @@ const AX = [['+X', [90, 0, 0]], ['−X', [-90, 0, 0]], ['+Y', [0, 90, 0]], ['−
 const toCam = new THREE.Vector3();
 const tmp = new THREE.Vector3(), box3 = new THREE.Box3();
 const centerOf = sub => { box3.makeEmpty(); for (const m of bySub[sub] || []) box3.expandByObject(m); return box3.getCenter(new THREE.Vector3()); };
+const lay = {};      // each callout's side and on-screen spot, kept between frames so tags glide instead of jumping
 function placeTags(W, H) {
-  const cx = W / 2, items = []; let lines = '';
+  const cx = W / 2, items = [], ease = reduced ? 1 : 0.22; let lines = '';
   for (const k of LABELS) {
     const el = tags[k], show = st.labels && (!SUBS[k].inside || !st.panels || st.ex > 0.35);
-    if (!show) { el.style.transform = 'translate(-9999px,0)'; continue; }
     tmp.copy(centerOf(k)).project(camera);
-    if (tmp.z > 1) { el.style.transform = 'translate(-9999px,0)'; continue; }
-    items.push({ k, el, x: (tmp.x + 1) / 2 * W, y: (1 - tmp.y) / 2 * H });
+    if (!show || tmp.z > 1) { el.style.transform = 'translate(-9999px,0)'; if (lay[k]) lay[k].live = false; continue; }
+    const x = (tmp.x + 1) / 2 * W, y = (1 - tmp.y) / 2 * H;
+    let s = lay[k];
+    if (!s || !s.live) s = lay[k] = { side: x >= cx ? 'R' : 'L', ty: null, lx: null, live: true };
+    else if (s.side === 'R' ? x < cx - 40 : x > cx + 40) { s.side = s.side === 'R' ? 'L' : 'R'; s.lx = null; }   // switch sides only once the part is clearly across
+    items.push({ k, el, x, y, s });
   }
-  for (const side of ['L', 'R']) {
-    const list = items.filter(it => side === 'R' ? it.x >= cx : it.x < cx).sort((a, b) => a.y - b.y);
-    let last = -1e9;
-    for (const it of list) { let ty = Math.max(it.y, last + 26); ty = Math.min(ty, H - 70); last = ty; it.ty = ty; it.side = side; }
+  for (const side of ['L', 'R']) {      // space each column 26 px apart, then lift it as a whole if it runs off the bottom
+    const list = items.filter(it => it.s.side === side).sort((a, b) => a.y - b.y);
+    let last = 20;
+    for (const it of list) last = it.ty = Math.max(it.y, last + 26);
+    let floor = H - 72;
+    for (let i = list.length - 1; i >= 0; i--) floor = (list[i].ty = Math.min(list[i].ty, floor)) - 26;
   }
   for (const it of items) {
-    const w = it.el.offsetWidth;
-    const lx = it.side === 'R' ? Math.min(W - w - 10, Math.max(it.x + 40, cx + 90)) : Math.max(10, Math.min(it.x - 40 - w, cx - 90 - w));
-    it.el.style.transform = `translate(${lx.toFixed(0)}px,${(it.ty - 11).toFixed(0)}px)`;
+    const s = it.s, w = it.el.offsetWidth;
+    const lx = s.side === 'R' ? Math.min(W - w - 10, Math.max(it.x + 40, cx + 90)) : Math.max(10, Math.min(it.x - 40 - w, cx - 90 - w));
+    s.ty = s.ty == null ? it.ty : s.ty + (it.ty - s.ty) * ease;
+    s.lx = s.lx == null ? lx : s.lx + (lx - s.lx) * ease;
+    it.el.style.transform = `translate(${s.lx.toFixed(0)}px,${(s.ty - 11).toFixed(0)}px)`;
     it.el.classList.toggle('sel', it.k === st.sel);
-    const ex = it.side === 'R' ? lx : lx + w;
-    lines += `<line x1="${it.x.toFixed(1)}" y1="${it.y.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${it.ty.toFixed(1)}"/><circle cx="${it.x.toFixed(1)}" cy="${it.y.toFixed(1)}" r="2.5"/>`;
+    const ex = s.side === 'R' ? s.lx : s.lx + w;
+    lines += `<line x1="${it.x.toFixed(1)}" y1="${it.y.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${s.ty.toFixed(1)}"/><circle cx="${it.x.toFixed(1)}" cy="${it.y.toFixed(1)}" r="2.5"/>`;
   }
   for (const a of AX) {      // only label the faces turned towards the camera
     const facing = toCam.copy(camera.position).sub(a.v).dot(a.n) > 0;
