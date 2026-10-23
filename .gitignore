@@ -4,3 +4,6 @@ node_modules/
 hardware/*.zip
 *.blend1
 __pycache__/
+
+.vercel
+.env*
