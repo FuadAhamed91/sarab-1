@@ -79,6 +79,8 @@ No jammer is ever used. Tests use signal blocking, local electronic noise and re
 
 ## 3D model and renders
 
+![SARAB-1 taken apart: top deck with the solar panel and GPS antenna, the GPS deck, the main deck and the power deck](assets/renders/sarab1-decks.jpg)
+
 The website's model (`assets/sarab1.glb`) and the renders in `assets/renders/` are built in Blender 5.2 from the same part list as the Tinkercad files, so the model, the cut list and the report always agree. After changing `hardware/build_model.py`:
 
 ```bash
@@ -90,7 +92,7 @@ blender --background --factory-startup --python hardware/blender/build_sarab1.py
 ```
 
 ```bash
-blender --background hardware/blender/sarab1.blend --python hardware/blender/render_sarab1.py -- hero exploded inside
+blender --background hardware/blender/sarab1.blend --python hardware/blender/render_sarab1.py -- hero exploded inside decks
 ```
 
 The textures are drawn by `hardware/blender/textures.html`; `python hardware/blender/render_textures.py` saves them as PNGs with headless Chrome.

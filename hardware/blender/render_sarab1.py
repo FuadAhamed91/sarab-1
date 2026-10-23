@@ -1,8 +1,9 @@
 """Studio renders of SARAB-1 for the poster, the report and the README.
 
 Needs the model from build_sarab1.py: run it in the same Blender session, or on the saved file:
-  blender --background hardware/blender/sarab1.blend --python hardware/blender/render_sarab1.py -- hero exploded inside
-Writes assets/renders/sarab1-<shot>.jpg. Cycles on a laptop CPU takes several minutes per shot;
+  blender --background hardware/blender/sarab1.blend --python hardware/blender/render_sarab1.py -- hero exploded inside decks
+Writes assets/renders/sarab1-<shot>.jpg ("decks" is the cube taken apart, its four decks side by side, for the poster's
+wide prototype strip). Cycles on a laptop CPU takes several minutes per shot;
 add --test for a small Cycles check of the lighting, or --preview for a quick EEVEE draft. The studio (backdrop, lights, camera) lives in its own
 collection, "S1 studio", so it never ends up in the website model.
 """
@@ -25,6 +26,19 @@ OFF = {  # exploded-view offsets in mm, the same as the website's (src/sat-model
     'rail_pp': (72, 72, 48), 'rail_pn': (72, -72, 48), 'rail_np': (-72, 72, 48), 'rail_nn': (-72, -72, 48)}
 SHELL = [o for o in MODEL.all_objects if o.get('sub') in ('panels', 'rails') and o.get('part') not in ('base', 'top_plate')]
 CABLES = [o for o in MODEL.all_objects if o.get('kind') == 'cable']
+
+
+def layer_of(o):
+    while o is not None and 'layer' not in o:
+        o = o.parent
+    return o['layer'] if o is not None else None
+
+
+DECKS = ['top', 'deck2', 'deck1', 'base']   # the "decks" shot sets these down in a row, the top of the cube on the left
+LOOSE = [o for o in MODEL.all_objects if o.type == 'MESH' and str(layer_of(o)).startswith(('wall', 'rail'))]   # shell and front screen
+FLOOR = {name: min((o.matrix_world @ Vector(c)).z for o in MODEL.all_objects   # lowest point of each deck, assembled
+                   if o.type == 'MESH' and o.get('kind') != 'cable' and layer_of(o) == name for c in o.bound_box)
+         for name in DECKS}
 
 
 def lin(h):
@@ -170,6 +184,15 @@ def explode(k, shell_k=None):
         e.location = Vector(OFF[name]) * s
 
 
+def set_down(az, gap):
+    """Take the cube apart and stand each deck on the floor, in a row across the picture (gap mm apart)."""
+    explode(0)
+    a = math.radians(az)
+    across = Vector((math.cos(a), math.sin(a), 0))      # the camera's left-to-right
+    for i, name in enumerate(DECKS):
+        LAYER[name].location = across * ((i - (len(DECKS) - 1) / 2) * gap) - Vector((0, 0, FLOOR[name]))
+
+
 def setup_render(res):
     r = scn.render
     r.resolution_x, r.resolution_y, r.resolution_percentage = res[0], res[1], 100
@@ -200,6 +223,7 @@ SHOT_SETUPS = {   # name: (resolution, camera az, el, distance, target, lens, ex
     'hero': ((2000, 1500), 38, 22, 520, (0, 0, 58), 70, 0, None, False, False),
     'exploded': ((1500, 2000), 36, 24, 700, (0, 0, 140), 70, 1, 1.75, True, True),
     'inside': ((2000, 1500), 30, 13, 500, (0, 0, 60), 70, 0, None, True, False),
+    'decks': ((2400, 780), 30, 42, 1625, (0, 0, 16), 100, 'decks', None, True, True),
 }
 done = []
 try:
@@ -210,9 +234,14 @@ try:
             res = (res[0] * 2 // 5, res[1] * 2 // 5)
         setup_render(res)
         stage(az, el, dist, target, lens)
-        explode(k, shell_k)
+        if k == 'decks':
+            set_down(az, 135)
+        else:
+            explode(k, shell_k)
         for o in SHELL:
             o.hide_render = no_shell
+        for o in LOOSE:
+            o.hide_render = k == 'decks' or (no_shell and o in SHELL)
         for o in CABLES:
             o.hide_render = no_cables
         path = os.path.join(OUT, f'sarab1-{shot}{"-preview" if PREVIEW else "-test" if TEST else ""}.jpg')
@@ -221,7 +250,7 @@ try:
         done.append(path)
 finally:   # leave the model assembled and fully visible
     explode(0)
-    for o in SHELL + CABLES:
+    for o in SHELL + LOOSE + CABLES:
         o.hide_render = False
 RESULT = {'rendered': done}
 print('SARAB-1 renders:', RESULT)
