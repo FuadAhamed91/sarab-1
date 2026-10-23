@@ -93,7 +93,7 @@ export class Simulator {
         sats: this.sats.map(s => ({ prn: s.prn, el: s.el, az: Math.round(s.az), cn0: s.cn0 >= 22 ? Math.round(s.cn0) : 0, b: +s.base.toFixed(1) }))
       },
       det: { index, state: this.state, drop_db: +drop.toFixed(1), cn0_mean: +mean.toFixed(1), cn0_sd: +sd.toFixed(2), cn0_el_r: +r.toFixed(2), pos_dev_km: +dev.toFixed(1) },
-      eps: { solar_w: +solar.toFixed(2), vbat: +(3.45 + 0.75 * this.soc).toFixed(2), soc_pct: Math.round(this.soc * 100), load_w: +load.toFixed(2) },
+      eps: (() => { const vbat = 3.45 + 0.75 * this.soc, net = solar - load; return { vbat: +vbat.toFixed(2), ibat_ma: Math.round(net / vbat * 1000), net_w: +net.toFixed(2), soc_pct: Math.round(this.soc * 100), solar_w: +solar.toFixed(2), load_w: +load.toFixed(2) }; })(),
       adcs: { roll_deg: +(1.4 * Math.sin(this.t / 9) + this.gauss() * 0.15).toFixed(1), pitch_deg: +(1.0 * Math.cos(this.t / 11) + this.gauss() * 0.15).toFixed(1), vib_g: +(0.018 + Math.abs(this.gauss()) * 0.004).toFixed(3) },
       therm: { board_c: +(31.2 + 0.6 * Math.sin(this.t / 40) + this.gauss() * 0.05).toFixed(1) }
     };

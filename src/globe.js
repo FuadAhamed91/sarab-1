@@ -12,7 +12,7 @@ import { trackAt, PASS } from './sim.js';
 import { buildSatellite } from './sat-model.js';
 
 const R = 1000, ALT = 82;   // 1 unit = 6.37 km, so 82 units is the real 525 km altitude
-const TEX = 'https://cdn.jsdelivr.net/npm/three-globe@2/example/img/';
+const TEX = 'https://cdn.jsdelivr.net/npm/three-globe@2.45.6/example/img/';
 const STATE_HEX = { NOMINAL: 0x5eb3e8, SUSPECT: 0xe6ab47, JAMMING: 0xf26c60, SPOOFING: 0xf065bb };
 const rad = d => d * Math.PI / 180;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));

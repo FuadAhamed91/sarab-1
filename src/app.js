@@ -13,7 +13,7 @@ const LIVE_TIMEOUT = 12000;
 const sim = new Simulator();
 const store = new Store();
 let source = 'sim', pref = params.get('source') || 'auto', paused = false, lastTick = performance.now();
-let liveTimes = [], lastLive = null, lastLiveAt = 0, pktCount = 0, linkInfo = { state: 'connecting', broker: null };
+let liveTimes = [], lastLive = null, lastLiveAt = 0, pktCount = 0, linkInfo = { state: 'connecting', up: [] };
 let globe = null, attitude = null;
 
 function warmSim() {          // replay the last ~3 minutes so the page opens mid-pass with history
@@ -39,7 +39,7 @@ function renderChrome() {
   const isTest = lastLive && lastLive.src === 'TEST';
   if (source === 'live') { chip.dataset.mode = stale ? 'stale' : isTest ? 'test' : 'live'; chip.textContent = stale ? 'Cube offline' : isTest ? 'Live · test transmitter' : 'Live · cube'; }
   else { chip.dataset.mode = 'sim'; chip.textContent = TRANSMIT ? 'Test transmitter' : 'Simulation'; }
-  $('downlink').textContent = linkInfo.state === 'connected' ? `${linkInfo.broker} · connected` : linkInfo.state === 'connecting' ? 'Connecting…' : linkInfo.state === 'unavailable' ? 'Unavailable' : 'Reconnecting…';
+  $('downlink').textContent = linkInfo.state === 'connected' ? `${linkInfo.up.join(' + ')} · listening` : linkInfo.state === 'connecting' ? 'Connecting…' : linkInfo.state === 'unavailable' ? 'Unavailable' : 'Reconnecting…';
   const b = $('banner');
   if (source === 'sim' && !TRANSMIT) {
     b.hidden = false;

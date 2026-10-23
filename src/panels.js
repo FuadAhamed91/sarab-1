@@ -35,9 +35,11 @@ export function renderStatus(c, store, live) {
   else if (st === 'SPOOFING') { txt = `All ${c.n} satellites arrive at almost the same strength (spread ${f1(c.sd)} dB) and the position is ${f1(c.dev)} km off where it should be. Fake GPS signals are being broadcast ${ph}.`; adv = 'Alert: GPS positions in this area can’t be trusted, even when they look normal.'; }
   else if (st === 'SUSPECT') { txt = `Signals are ${f1(c.drop)} dB weaker than the clean baseline and noise is up ${noisePct}%. Watching for jamming ${ph}.`; adv = 'Early warning only. No action needed yet.'; }
   else { txt = `${c.n} of ${c.total} satellites tracked at healthy strength, averaging ${f1(c.mean)} dB-Hz. No interference ${ph}.`; adv = 'GPS is safe to use in this area.'; }
+  if (c.cal) { $('verdict').textContent = 'Calibrating'; txt = 'Learning the clean baseline for each satellite. Keep the antenna clear of covers and electronics for about a minute.'; adv = 'Detection starts automatically when calibration finishes.'; }
+  if (c.test === 'replay') adv = 'Replay test running: the cube is replaying a recorded spoofed signal to prove detection works.';
   $('statusReading').textContent = txt;
   $('statusAdvice').textContent = adv;
-  $('pmode').textContent = st === 'NOMINAL' ? 'Survey · 1 Hz' : 'Event · 5 Hz';
+  $('pmode').textContent = st === 'NOMINAL' ? 'Survey · 1 Hz' : 'Event · alert raised';
   $('snaps').textContent = String(store.snaps);
 }
 
@@ -80,9 +82,11 @@ export function renderTiles(c, H) {
   $('u-nsat').textContent = 'of ' + c.total;
   setTile('cn0', f1(c.mean), sgn(dMean) + ' dB vs clean baseline', spoof ? 'spoof' : dMean < -6 ? 'crit' : dMean < -2.5 ? 'warn' : 'ok');
   setTile('nsat', String(c.n), lost ? lost + ' lost to interference' : 'All satellites in view tracked', lost >= 3 ? 'crit' : lost >= 1 ? 'warn' : 'ok');
-  setTile('noise', String(Math.round(c.noise)), sgn(pct, 0) + '% vs baseline', pct > 40 ? 'crit' : pct > 15 ? 'warn' : 'ok');
-  setTile('jam', String(c.jam), c.jam < 20 ? 'Under 20 means clean' : c.jam < 80 ? 'Rising: possible interference' : 'Strong interference', c.jam >= 80 ? 'crit' : c.jam >= 20 ? 'warn' : 'ok');
-  setTile('agc', f1(c.agc), sgn(c.agc - c.base.agc) + ' pts vs baseline', c.agc < c.base.agc - 12 ? 'crit' : c.agc < c.base.agc - 5 ? 'warn' : 'ok');
+  if (c.src !== 'HW' || c.hw) {
+    setTile('noise', String(Math.round(c.noise)), sgn(pct, 0) + '% vs baseline', pct > 40 ? 'crit' : pct > 15 ? 'warn' : 'ok');
+    setTile('jam', String(c.jam), c.jam < 20 ? 'Under 20 means clean' : c.jam < 80 ? 'Rising: possible interference' : 'Strong interference', c.jam >= 80 ? 'crit' : c.jam >= 20 ? 'warn' : 'ok');
+    setTile('agc', f1(c.agc), sgn(c.agc - c.base.agc) + ' pts vs baseline', c.agc < c.base.agc - 12 ? 'crit' : c.agc < c.base.agc - 5 ? 'warn' : 'ok');
+  } else for (const id of ['noise', 'jam', 'agc']) setTile(id, '—', 'Not reported by this receiver', 'ok');
   setTile('dev', f1(c.dev), c.dev < 5 ? 'Fix matches where it should be' : 'Fix has jumped away', c.dev >= 5 ? 'spoof' : 'ok');
   for (const t of TILES) spark($('s-' + t.id), H[t.key], t.lo, t.hi);
 }
@@ -163,13 +167,17 @@ export function renderChecks(c) {
 
 /* ---------- Housekeeping ---------- */
 export function renderHK(c) {
-  const set = (id, t) => { $(id).textContent = t; }, net = c.solar - c.load;
+  const set = (id, t) => { $(id).textContent = t; };
   set('hk-roll', sgn(c.roll) + '°'); set('hk-pitch', sgn(c.pitch) + '°'); set('hk-point', Math.hypot(c.roll, c.pitch).toFixed(1) + '°'); set('hk-vib', c.vib.toFixed(3) + ' g');
-  set('hk-solar', c.solar.toFixed(2) + ' W'); set('hk-load', c.load.toFixed(2) + ' W'); set('hk-net', sgn(net, 2) + ' W'); set('hk-batt', c.vbat.toFixed(2) + ' V · ' + Math.round(c.soc) + '%');
+  set('hk-batt', c.vbat.toFixed(2) + ' V · ' + Math.round(c.soc) + '%');
+  set('hk-ibat', (c.ibat >= 0 ? '+' : '\u2212') + Math.abs(Math.round(c.ibat)) + ' mA ' + (c.ibat >= 0 ? 'charging' : 'draining'));
+  set('hk-net', sgn(c.net, 2) + ' W');
+  set('hk-solar', c.solar != null ? c.solar.toFixed(2) + ' W' : (c.ibat > 20 ? 'Charging' : 'Not charging'));
   set('hk-temp', c.temp.toFixed(1) + ' °C');
   const tempOk = c.temp > 0 && c.temp < 45, battOk = c.vbat === 0 || c.vbat > 3.4, tiltOk = Math.hypot(c.roll, c.pitch) < 15;
+  const sunlit = c.solar != null ? c.solar > 0.2 : c.ibat > 20;
   const pill = (id, ok, good, bad) => { const el = $(id); el.textContent = ok ? good : bad; el.className = 'pill ' + (ok ? 'pill-good' : 'pill-fail'); };
-  pill('hk-att-pill', tiltOk, 'Stable', 'Tilted'); pill('hk-pow-pill', battOk, c.solar > 0.2 ? 'Sunlit' : 'On battery', 'Low battery'); pill('hk-th-pill', tempOk, 'In range', 'Out of range');
+  pill('hk-att-pill', tiltOk, 'Stable', 'Tilted'); pill('hk-pow-pill', battOk, sunlit ? 'Sunlit' : 'On battery', 'Low battery'); pill('hk-th-pill', tempOk, 'In range', 'Out of range');
 }
 
 /* ---------- Event log ---------- */

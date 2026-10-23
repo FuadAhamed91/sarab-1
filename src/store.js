@@ -54,9 +54,10 @@ export class Store {
     this.cur = {
       src: pkt.src || 'HW', seq: num(pkt.seq), orbit, pos, pl, sats, n: g.nsat != null ? num(g.nsat) : tr.length, total: sats.length || 10,
       mean, sd, r, drop, noise, jam, agc, dev, index, state, base, baseMean: avg(sats.map(s => s.b)),
-      solar: num(e.solar_w), load: num(e.load_w), vbat: num(e.vbat), soc: num(e.soc_pct),
+      vbat: num(e.vbat), ibat: num(e.ibat_ma), net: e.net_w != null ? num(e.net_w) : num(e.vbat) * num(e.ibat_ma) / 1000, soc: num(e.soc_pct),
+      solar: e.solar_w != null ? num(e.solar_w) : null, load: e.load_w != null ? num(e.load_w) : null,
       roll: num(a.roll_deg), pitch: num(a.pitch_deg), vib: num(a.vib_g), temp: num(th.board_c),
-      fix: { lat: num(g.lat), lon: num(g.lon), q: g.fix || '—' }
+      fix: { lat: num(g.lat), lon: num(g.lon), q: g.fix || '—' }, hw: g.noise != null, cal: !!det.cal, test: det.test || null, ack: det.ack || null
     };
     if (state !== prev) { this.state = state; this.since = now; this.transition(prev, state, index, pos, pl, now, quiet); }
     if (!this.since) this.since = now;
