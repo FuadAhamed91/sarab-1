@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en" data-state="NOMINAL">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SARAB-1 Ground Station</title>
+<meta name="description" content="Live ground station for SARAB-1, a 1U CubeSat that detects GPS jamming and spoofing over the Arabian Gulf. Team CodeBusters, SatForge UAE 2026.">
+<meta name="theme-color" content="#060E13">
+<meta property="og:title" content="SARAB-1 Ground Station">
+<meta property="og:description" content="A CubeSat that tells ships, planes and drones where GPS is lying over the Gulf.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@600&family=IBM+Plex+Sans:wght@400;500;600&family=Saira+Semi+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./" aria-label="SARAB-1 ground station home">
+      <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect x="9" y="11" width="22" height="22" rx="3" fill="none" stroke="#5EB3E8" stroke-width="2"/><rect x="12" y="7" width="16" height="4" rx="1" fill="#5EB3E8"/><path d="M20 33v4M14 37h12" stroke="#9DB2BE" stroke-width="2" stroke-linecap="round"/><circle cx="20" cy="22" r="4" fill="none" stroke="#8FD3FF" stroke-width="2"/></svg>
+      <span>
+        <span class="brand-name"><span class="brand-en">SARAB-1</span><span class="brand-ar" lang="ar" dir="rtl">سراب</span></span>
+        <span class="brand-sub">Gulf GNSS Interference Watch · Ground station</span>
+      </span>
+    </a>
+    <nav class="nav" aria-label="Pages"><a href="./" aria-current="page">Ground station</a><a href="model.html">3D model</a></nav>
+    <div class="meta">
+      <span class="chip" id="linkChip" data-mode="sim">Simulation</span>
+      <dl class="meta-dl">
+        <div><dt>UTC</dt><dd id="utc">--:--:--</dd></div>
+        <div><dt>Downlink</dt><dd id="downlink">Connecting…</dd></div>
+        <div><dt>Packets</dt><dd id="pkts">0</dd></div>
+      </dl>
+    </div>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <section class="hero" aria-label="Mission view">
+    <div class="globe" id="globe"><div class="glabels" id="glabels" aria-hidden="true"></div></div>
+    <div class="hud hud-status" aria-labelledby="h-status">
+      <div class="hud-head"><h2 id="h-status">Detection status</h2><span class="pmeta" id="since">—</span></div>
+      <div class="verdict-row">
+        <div class="verdict" id="verdict">Clean signal</div>
+        <svg class="gauge" id="gauge" viewBox="0 0 140 84" role="img" aria-label="Interference Index"></svg>
+      </div>
+      <p class="reading" id="statusReading" aria-live="polite"></p>
+      <p class="advice" id="statusAdvice"></p>
+      <dl class="kv">
+        <div><dt>Payload mode</dt><dd id="pmode">Survey · 1 Hz</dd></div>
+        <div><dt>Event snapshots</dt><dd id="snaps">0</dd></div>
+      </dl>
+    </div>
+    <div class="hud hud-pass" aria-labelledby="h-pass">
+      <h2 id="h-pass">Position</h2>
+      <dl class="passinfo" id="passInfo"></dl>
+      <ul class="legend legend-col">
+        <li><span class="sw sw-line"></span>Orbit</li>
+        <li><span class="sw sw-cone"></span>Listening footprint</li>
+        <li><span class="sw sw-jam"></span>Jamming zone</li>
+        <li><span class="sw sw-spz"></span>Spoofing zone</li>
+        <li><span class="sw sw-link"></span>Downlink to Al Ain</li>
+      </ul>
+    </div>
+    <div class="hud hud-ctrl" aria-label="Data source and demo controls">
+      <span class="seg-label">Data</span>
+      <div class="seg" role="group" aria-label="Data source">
+        <button type="button" data-src="auto" aria-pressed="true">Auto</button>
+        <button type="button" data-src="live" aria-pressed="false">Live cube</button>
+        <button type="button" data-src="sim" aria-pressed="false">Simulation</button>
+      </div>
+      <span class="seg-label" id="scenLabel">Scenario</span>
+      <div class="seg" role="group" aria-label="Simulated scenario" id="scenarios">
+        <button type="button" data-scn="auto" aria-pressed="true">Full pass</button>
+        <button type="button" data-scn="nominal" aria-pressed="false">Clean</button>
+        <button type="button" data-scn="jam" aria-pressed="false">Jamming</button>
+        <button type="button" data-scn="spoof" aria-pressed="false">Spoofing</button>
+      </div>
+      <button type="button" class="btn-ghost" id="b-pause" aria-pressed="false">Pause</button>
+      <button type="button" class="btn-ghost" id="b-view">Reset view</button>
+    </div>
+  </section>
+
+  <main class="grid" id="grid">
+    <section class="panel span-12" aria-labelledby="h-rx">
+      <div class="phead"><h2 id="h-rx">Receiver health</h2><span class="pmeta">u-blox NEO-6M · last 2 min</span></div>
+      <div class="tiles" id="tiles"></div>
+    </section>
+
+    <section class="panel span-7" aria-labelledby="h-bars">
+      <div class="phead"><h2 id="h-bars">Signal strength per satellite</h2><span class="pmeta">C/N0 in dB-Hz</span></div>
+      <p class="reading" id="barsReading"></p>
+      <div class="chart" id="bars"></div>
+      <ul class="legend">
+        <li><span class="sw sw-strong"></span>Strong, 35+</li>
+        <li><span class="sw sw-weak"></span>Weak, 22–35</li>
+        <li><span class="sw sw-lost"></span>Lost, under 22</li>
+        <li><span class="sw sw-base"></span>Clean baseline</li>
+      </ul>
+    </section>
+
+    <section class="panel span-5" aria-labelledby="h-sky">
+      <div class="phead"><h2 id="h-sky">Receiver sky view</h2><span class="pmeta">Azimuth and elevation</span></div>
+      <p class="reading" id="skyReading"></p>
+      <div class="skybox"><svg id="sky" viewBox="-12 0 324 304" role="img" aria-label="Sky plot of the GPS satellites in view, coloured by signal strength"></svg></div>
+    </section>
+
+    <section class="panel span-7" aria-labelledby="h-tl">
+      <div class="phead"><h2 id="h-tl">Interference Index over time</h2><span class="pmeta">Last 2 min</span></div>
+      <p class="reading" id="tlReading"></p>
+      <div class="chart" id="timeline"></div>
+      <ul class="legend">
+        <li><span class="sw sw-line"></span>Interference Index</li>
+        <li><span class="sw sw-sp"></span>Seconds flagged as spoofing</li>
+      </ul>
+    </section>
+
+    <section class="panel span-5" aria-labelledby="h-checks">
+      <div class="phead"><h2 id="h-checks">Spoofing checks</h2><span class="pmeta" id="checksMeta"></span></div>
+      <ul class="checks" id="checks"></ul>
+    </section>
+
+    <section class="panel span-5" aria-labelledby="h-hk">
+      <div class="phead"><h2 id="h-hk">Satellite housekeeping</h2><span class="pmeta">Attitude · power · thermal</span></div>
+      <div class="hk">
+        <div class="hk-b">
+          <div class="hk-h"><h3>Attitude</h3><span class="pill pill-good" id="hk-att-pill">Stable</span></div>
+          <div class="att" id="att"><span class="att-cap">Tilt from the motion sensor · blue arrow is the antenna, dashed line is straight up</span></div>
+          <dl class="kv"><div><dt>Roll</dt><dd id="hk-roll">—</dd></div><div><dt>Pitch</dt><dd id="hk-pitch">—</dd></div><div><dt>Antenna pointing error</dt><dd id="hk-point">—</dd></div><div><dt>Vibration</dt><dd id="hk-vib">—</dd></div></dl>
+        </div>
+        <div class="hk-b">
+          <div class="hk-h"><h3>Power</h3><span class="pill pill-good" id="hk-pow-pill">Sunlit</span></div>
+          <dl class="kv"><div><dt>Solar input</dt><dd id="hk-solar">—</dd></div><div><dt>Load</dt><dd id="hk-load">—</dd></div><div><dt>Net</dt><dd id="hk-net">—</dd></div><div><dt>Battery</dt><dd id="hk-batt">—</dd></div></dl>
+        </div>
+        <div class="hk-b">
+          <div class="hk-h"><h3>Thermal</h3><span class="pill pill-good" id="hk-th-pill">In range</span></div>
+          <dl class="kv"><div><dt>Board temperature</dt><dd id="hk-temp">—</dd></div><div><dt>Battery-safe range</dt><dd>0 to 45 °C</dd></div></dl>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel span-7" aria-labelledby="h-log">
+      <div class="phead"><h2 id="h-log">Event log</h2><span class="pmeta" id="logMeta"></span></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th scope="col">Time (UTC)</th><th scope="col">Event</th><th scope="col">Index</th><th scope="col">Area</th><th scope="col">What it means</th></tr></thead>
+          <tbody id="log"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel span-12" aria-labelledby="h-pkt">
+      <div class="phead"><h2 id="h-pkt">Latest telemetry packet</h2><span class="pmeta" id="pktMeta"></span></div>
+      <p class="reading">The cube sends this JSON once a second over MQTT. Simulated and live packets use the same format, so every panel works the same way for both.</p>
+      <pre class="packet" id="packet"></pre>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>SARAB-1 · Team CodeBusters · SatForge UAE 2026</span>
+    <span>Earth imagery: NASA Blue Marble and Black Marble. Coastlines are schematic.</span>
+  </footer>
+</div>
+<div class="sr" aria-live="polite" id="live"></div>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@4.3.7/dist/mqtt.min.js"></script>
+<script type="module" src="src/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SARAB-1 CubeSat Model</title>
+<meta name="description" content="Interactive 3D model of the SARAB-1 1U CubeSat prototype, with an exploded view and the foam cut list for the hand build.">
+<meta name="theme-color" content="#060E13">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@600&family=IBM+Plex+Sans:wght@400;500;600&family=Saira+Semi+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+<style>
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+@media (max-width:980px){.layout{grid-template-columns:minmax(0,1fr)}}
+.stage{position:relative;height:clamp(420px,66vh,720px);border-radius:10px;border:1px solid var(--rule);overflow:hidden;background:radial-gradient(ellipse at 50% 34%,#1a2c36,#03080b 78%);touch-action:none}
+.stage canvas{display:block;width:100%;height:100%;outline:none;cursor:grab}
+#leads{position:absolute;inset:0;pointer-events:none;width:100%;height:100%}
+#leads line{stroke:rgba(227,236,241,.42);stroke-width:1}
+#leads circle{fill:var(--ink)}
+.tag{position:absolute;left:0;top:0;pointer-events:none;font-size:12px;font-weight:500;white-space:nowrap;padding:3px 8px;border-radius:4px;background:rgba(5,13,18,.85);color:var(--ink);border:1px solid var(--rule-2);transform:translate(-9999px,0)}
+.tag.sel{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.tag.axis{background:transparent;border:0;font-family:var(--f-mono);font-size:11px;color:var(--ink-3);padding:0}
+.shud{position:absolute;left:12px;right:12px;bottom:12px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;pointer-events:none}
+.shud > *{pointer-events:auto}
+.ctrl{display:flex;align-items:center;gap:10px;background:var(--glass);border:1px solid var(--rule-2);border-radius:8px;padding:7px 12px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.ctrl label{font-family:var(--f-display);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.ctrl input[type=range]{width:min(220px,40vw);accent-color:var(--accent)}
+.shud .seg,.shud .btn-ghost{background:var(--glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.hint{position:absolute;top:12px;left:12px;font-size:12px;color:var(--ink-3);pointer-events:none;margin:0}
+.side{display:flex;flex-direction:column;gap:16px;min-width:0}
+.info h3{margin:2px 0 0;font-size:17px;font-weight:600}
+.info .sys{font-family:var(--f-display);font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.info p{margin:6px 0 0;color:var(--ink-2)}
+.info dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:10px 0 0}
+.info dt{font-family:var(--f-display);font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);align-self:center}
+.info dd{margin:0;font-family:var(--f-mono);font-size:12.5px}
+.index{display:flex;flex-direction:column;gap:12px}
+.index h4{margin:0 0 4px;font-family:var(--f-display);font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+.index ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.index button{width:100%;display:flex;justify-content:space-between;gap:10px;text-align:left;font:inherit;color:var(--ink);background:transparent;border:0;border-radius:6px;padding:6px 8px;cursor:pointer}
+.index button span:last-child{color:var(--ink-3);font-size:12px;white-space:nowrap}
+.index button:hover{background:var(--panel-2)}
+.index button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-2)}
+.cut{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px}
+@media (max-width:980px){.cut{grid-template-columns:minmax(0,1fr)}}
+.cut table{min-width:420px}
+.note{margin:0;font-size:12.5px;color:var(--ink-3);max-width:70ch}
+.specs{display:flex;flex-wrap:wrap;gap:6px 22px;margin:0}
+.specs div{display:flex;flex-direction:column}
+.specs dt{font-family:var(--f-display);font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.specs dd{margin:0;font-family:var(--f-mono);font-size:13px}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./" aria-label="SARAB-1 ground station home">
+      <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect x="9" y="11" width="22" height="22" rx="3" fill="none" stroke="#5EB3E8" stroke-width="2"/><rect x="12" y="7" width="16" height="4" rx="1" fill="#5EB3E8"/><path d="M20 33v4M14 37h12" stroke="#9DB2BE" stroke-width="2" stroke-linecap="round"/><circle cx="20" cy="22" r="4" fill="none" stroke="#8FD3FF" stroke-width="2"/></svg>
+      <span>
+        <span class="brand-name"><span class="brand-en">SARAB-1</span><span class="brand-ar" lang="ar" dir="rtl">سراب</span></span>
+        <span class="brand-sub">1U CubeSat prototype · 3D model of the tabletop build</span>
+      </span>
+    </a>
+    <nav class="nav" aria-label="Pages"><a href="./">Ground station</a><a href="model.html" aria-current="page">3D model</a></nav>
+    <dl class="specs">
+      <div><dt>Envelope</dt><dd>100 × 100 × 113.5 mm</dd></div>
+      <div><dt>Mass (est.)</dt><dd>122 g</dd></div>
+      <div><dt>Structure</dt><dd>5 mm foam board</dd></div>
+      <div><dt>Components</dt><dd>12</dd></div>
+    </dl>
+  </header>
+
+  <div class="layout">
+    <div class="stage" id="stage">
+      <svg id="leads" aria-hidden="true"></svg>
+      <div id="tags"></div>
+      <p class="hint">Drag to rotate · scroll or pinch to zoom · tap a part</p>
+      <div class="shud">
+        <div class="ctrl"><label for="explode">Exploded view</label><input type="range" id="explode" min="0" max="100" value="0"></div>
+        <div class="seg" role="group" aria-label="View options">
+          <button type="button" id="b-panels" aria-pressed="true">Panels</button>
+          <button type="button" id="b-labels" aria-pressed="true">Labels</button>
+        </div>
+        <button type="button" class="btn-ghost" id="b-reset">Reset view</button>
+      </div>
+    </div>
+    <aside class="side">
+      <section class="panel info" id="info" aria-live="polite"></section>
+      <section class="panel"><div class="phead"><h2>Parts</h2></div><div class="index" id="index"></div></section>
+    </aside>
+  </div>
+
+  <section class="panel">
+    <div class="phead"><h2>Foam cut list</h2><span class="pmeta">5 mm foam board · one A3 sheet</span></div>
+    <div class="cut">
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th scope="col">Piece</th><th scope="col">Qty</th><th scope="col">Size (mm)</th><th scope="col">Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Base and top panels</td><td class="mono">2</td><td class="mono">100 × 100</td><td>Top panel gets a 5 mm hole under the antenna for its cable</td></tr>
+            <tr><td>Side panels</td><td class="mono">4</td><td class="mono">83 × 103.5</td><td>Sit between the corner rails</td></tr>
+            <tr><td>Decks</td><td class="mono">2</td><td class="mono">83 × 83</td><td>Deck 1 at 38 mm, deck 2 at 75 mm above the base</td></tr>
+            <tr><td>Corner rails</td><td class="mono">4</td><td class="mono">8.5 × 8.5 × 113.5</td><td>Glue two strips together; aluminium tape optional for the metal look</td></tr>
+            <tr><td>Deck pillars</td><td class="mono">8</td><td class="mono">6 × 6 × 33 / 32</td><td>Four under each deck, 35 mm in from the centre</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th scope="col">Opening</th><th scope="col">Panel</th><th scope="col">Size (mm)</th><th scope="col">Position</th></tr></thead>
+          <tbody>
+            <tr><td>USB (code upload)</td><td>−X</td><td class="mono">12 × 8</td><td>Centre 49 up, 27.5 from the +Y edge</td></tr>
+            <tr><td>Charge port</td><td>+X</td><td class="mono">10 × 5</td><td>Bottom edge, 20.5 from the −Y edge</td></tr>
+            <tr><td>Screen window</td><td>Front −Y</td><td class="mono">26 × 16</td><td>Centred, 68.5 up</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="note">The 3D model, the Tinkercad files and this cut list all come from one part list, so the build, the model and the report match.</p>
+  </section>
+
+  <footer class="foot">
+    <span>SARAB-1 · Team CodeBusters · SatForge UAE 2026</span>
+    <span>Component sizes from module datasheets; check each part on arrival.</span>
+  </footer>
+</div>
+<script type="module" src="src/model.js"></script>
+</body>
+</html>
