@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>SARAB-1 CubeSat Model</title>
 <meta name="description" content="Interactive 3D model of the SARAB-1 1U CubeSat prototype, with an exploded view and the foam cut list for the hand build.">
-<meta name="theme-color" content="#060E13">
+<meta name="theme-color" content="#F3EEE4">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,12 +14,12 @@
 <style>
 .layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
 @media (max-width:980px){.layout{grid-template-columns:minmax(0,1fr)}}
-.stage{position:relative;height:clamp(420px,66vh,720px);border-radius:10px;border:1px solid var(--rule);overflow:hidden;background:radial-gradient(ellipse at 50% 34%,#1a2c36,#03080b 78%);touch-action:none}
+.stage{position:relative;height:clamp(420px,66vh,720px);border-radius:12px;border:1px solid var(--rule);overflow:hidden;background:radial-gradient(ellipse at 50% 36%,#FFFFFF,#ECE4D5 80%);touch-action:none;box-shadow:var(--shadow)}
 .stage canvas{display:block;width:100%;height:100%;outline:none;cursor:grab}
 #leads{position:absolute;inset:0;pointer-events:none;width:100%;height:100%}
-#leads line{stroke:rgba(227,236,241,.42);stroke-width:1}
+#leads line{stroke:rgba(23,33,42,.38);stroke-width:1}
 #leads circle{fill:var(--ink)}
-.tag{position:absolute;left:0;top:0;pointer-events:none;font-size:12px;font-weight:500;white-space:nowrap;padding:3px 8px;border-radius:4px;background:rgba(5,13,18,.85);color:var(--ink);border:1px solid var(--rule-2);transform:translate(-9999px,0)}
+.tag{position:absolute;left:0;top:0;pointer-events:none;font-size:12px;font-weight:500;white-space:nowrap;padding:3px 8px;border-radius:5px;background:rgba(255,253,249,.94);color:var(--ink);border:1px solid var(--rule);box-shadow:0 2px 6px rgba(23,33,42,.08);transform:translate(-9999px,0)}
 .tag.sel{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 .tag.axis{background:transparent;border:0;font-family:var(--f-mono);font-size:11px;color:var(--ink-3);padding:0}
 .shud{position:absolute;left:12px;right:12px;bottom:12px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;pointer-events:none}
@@ -63,7 +63,7 @@
 <div class="wrap">
   <header class="top">
     <a class="brand" href="./" aria-label="SARAB-1 ground station home">
-      <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect x="9" y="11" width="22" height="22" rx="3" fill="none" stroke="#5EB3E8" stroke-width="2"/><rect x="12" y="7" width="16" height="4" rx="1" fill="#5EB3E8"/><path d="M20 33v4M14 37h12" stroke="#9DB2BE" stroke-width="2" stroke-linecap="round"/><circle cx="20" cy="22" r="4" fill="none" stroke="#8FD3FF" stroke-width="2"/></svg>
+      <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect x="9" y="11" width="22" height="22" rx="3" class="bm-body"/><rect x="12" y="7" width="16" height="4" rx="1" class="bm-panel"/><path d="M20 33v4M14 37h12" class="bm-stand"/><circle cx="20" cy="22" r="4" class="bm-ant"/></svg>
       <span>
         <span class="brand-name"><span class="brand-en">SARAB-1</span><span class="brand-ar" lang="ar" dir="rtl">سراب</span></span>
         <span class="brand-sub">1U CubeSat prototype · 3D model of the tabletop build</span>

@@ -177,20 +177,26 @@ export function createGlobe(box, labelBox, { reducedMotion = false, onReady } = 
     }
   }
 
-  /* HTML labels */
-  const labels = MAP_LABELS.map(l => { const d = document.createElement('div'); d.className = 'gl gl-' + l[3]; d.textContent = l[0]; labelBox.append(d); return { el: d, v: ll(l[1], l[2], R + 1), centred: l[3] !== 'city' }; });
+  /* HTML labels, placed in priority order; one that would overlap a label already placed waits until there is room */
+  const RANK = { gs: 0, 'sea-s': 1, city: 2, sea: 3, 'cty-s': 4, cty: 4 };
+  const labels = MAP_LABELS.map(l => { const d = document.createElement('div'); d.className = 'gl gl-' + l[3]; d.textContent = l[0]; labelBox.append(d); return { el: d, v: ll(l[1], l[2], R + 1), centred: l[3] !== 'city', rank: RANK[l[3]], dx: 8, dy: -9 }; });
   const gsLab = document.createElement('div'); gsLab.className = 'gl gl-gs'; gsLab.textContent = GROUND_STATION.name; labelBox.append(gsLab);
-  labels.push({ el: gsLab, v: ll(GROUND_STATION.lat, GROUND_STATION.lon, R + 1), centred: false });
+  labels.push({ el: gsLab, v: ll(GROUND_STATION.lat, GROUND_STATION.lon, R + 1), centred: false, rank: RANK.gs, dx: 10, dy: 2 });
+  labels.sort((a, b) => a.rank - b.rank);
   const satLab = document.createElement('div'); satLab.className = 'gl gl-sat'; satLab.textContent = 'SARAB-1'; labelBox.append(satLab);
   const tmp = new THREE.Vector3(), toCam = new THREE.Vector3();
   let W = 1, H = 1;
-  function place(el, v, centred, dx, dy, face) {
-    if (face) { toCam.copy(camera.position).sub(v); if (toCam.dot(v) < 0) { el.style.transform = 'translate(-9999px,0)'; return; } }
+  function place(el, v, centred, dx, dy, face, taken) {
+    const hide = () => { el.style.transform = 'translate(-9999px,0)'; };
+    if (face) { toCam.copy(camera.position).sub(v); if (toCam.dot(v) < 0) return hide(); }
     tmp.copy(v).project(camera);
-    if (tmp.z > 1 || Math.abs(tmp.x) > 1.15 || Math.abs(tmp.y) > 1.15) { el.style.transform = 'translate(-9999px,0)'; return; }
-    let x = (tmp.x + 1) / 2 * W, y = (1 - tmp.y) / 2 * H;
-    if (centred) { x -= el.offsetWidth / 2; y -= el.offsetHeight / 2; }
-    el.style.transform = `translate(${(x + dx).toFixed(0)}px,${(y + dy).toFixed(0)}px)`;
+    if (tmp.z > 1 || Math.abs(tmp.x) > 1.15 || Math.abs(tmp.y) > 1.15) return hide();
+    const w = el.offsetWidth, h = el.offsetHeight;
+    let x = (tmp.x + 1) / 2 * W + dx, y = (1 - tmp.y) / 2 * H + dy;
+    if (centred) { x -= w / 2; y -= h / 2; }
+    if (taken.some(b => x < b.x + b.w + 4 && b.x < x + w + 4 && y < b.y + b.h + 2 && b.y < y + h + 2)) return hide();
+    taken.push({ x, y, w, h });
+    el.style.transform = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`;
   }
 
   /* post-processing: a soft bloom on the orbit, halo, zones and city lights */
@@ -216,7 +222,7 @@ export function createGlobe(box, labelBox, { reducedMotion = false, onReady } = 
     if (!running) return;
     requestAnimationFrame(frame);
     if (document.hidden) return;
-    const hex = STATE_HEX[state.status] || 0x5eb3e8, sim = state.mode === 'sim';
+    const hex = STATE_HEX[state.status] || 0x5eb3e8, sim = state.mode === 'sim', taken = [];
     satRoot.visible = footDisk.visible = footRing.visible = trail.visible = sim;
     orbitLine.material.opacity = sim ? 0.32 : 0.12; traceLine.visible = sim;
     const ph = (ms % 1800) / 1800;
@@ -238,8 +244,8 @@ export function createGlobe(box, labelBox, { reducedMotion = false, onReady } = 
       const dGs = Math.hypot(p.lat - GROUND_STATION.lat, (p.lon - GROUND_STATION.lon) * Math.cos(rad(GROUND_STATION.lat)));
       link.visible = dGs < 9;
       if (link.visible) { link.geometry.setFromPoints([gsTop, sp]); link.computeLineDistances(); }
-      place(satLab, sp, false, 16, -30, false);
       satLab.style.display = '';
+      place(satLab, sp, false, 16, -30, false, taken);
     } else {
       link.visible = false; satLab.style.display = 'none';
     }
@@ -260,7 +266,7 @@ export function createGlobe(box, labelBox, { reducedMotion = false, onReady } = 
     if (ms - last > 60000) { last = ms; uniforms.sunDir.value.copy(sunDirection(new Date())); sun.position.copy(uniforms.sunDir.value).multiplyScalar(5000); }
     controls.update();
     composer.render();
-    for (const l of labels) place(l.el, l.v, l.centred, l.centred ? 0 : 8, l.centred ? 0 : -9, true);
+    for (const l of labels) place(l.el, l.v, l.centred, l.centred ? 0 : l.dx, l.centred ? 0 : l.dy, true, taken);
   }
   requestAnimationFrame(frame);
 

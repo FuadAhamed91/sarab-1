@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { buildSatellite, SUBS } from './sat-model.js';
+import { buildSatellite, loadSatellite, SUBS } from './sat-model.js';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -45,11 +45,17 @@ scene.add(key, new THREE.HemisphereLight(0xdbe9f4, 0x1b2731, 0.35));
 const ground = new THREE.Mesh(new THREE.CircleGeometry(420, 80), new THREE.ShadowMaterial({ opacity: 0.32 }));
 ground.rotation.x = -Math.PI / 2; ground.position.y = -0.5; ground.receiveShadow = true; scene.add(ground);
 
-const sat = buildSatellite({ detail: 'high', uniqueMaterials: true, oled: true });
+const hint = stage.querySelector('.hint'), hintText = hint.textContent;
+hint.textContent = 'Loading the detailed 3D model…';
+let sat;
+try { sat = await loadSatellite({ uniqueMaterials: true, oled: true }); }
+catch (e) { console.warn('Detailed model unavailable, showing the simple one:', e); sat = buildSatellite({ detail: 'high', uniqueMaterials: true, oled: true }); }
+hint.textContent = hintText;
 sat.setOled(['SARAB-1', 'GPS 3D  9 SATS', 'INTERF 4%', 'BATT 3.92V']);
 scene.add(sat.group);
 const meshes = sat.meshes, bySub = sat.bySub;
 const isShell = m => (m.userData.sub === 'panels' && m.userData.p.id !== 'base' && m.userData.p.id !== 'top_plate') || m.userData.sub === 'rails';
+const shell = meshes.filter(isShell);
 
 /* ---------- State and controls ---------- */
 const st = { ex: 0, exT: 0, panels: true, labels: true, sel: null, hover: null };
@@ -63,6 +69,7 @@ const forMats = (m, fn) => (Array.isArray(m.material) ? m.material : [m.material
 const SEL = new THREE.Color(0x1f6fa8), HOV = new THREE.Color(0x15384e), ZERO = new THREE.Color(0x000000);
 function paint() {
   for (const m of meshes) {
+    if (m.userData.kind === 'screen') continue;      // the lit OLED keeps its own glow
     const s = m.userData.sub, on = s === st.sel, hv = s === st.hover && !on;
     forMats(m, mt => { if (!mt.userData.e0) mt.userData.e0 = mt.emissive ? mt.emissive.clone() : ZERO; if (mt.emissive) mt.emissive.copy(on ? SEL : hv ? HOV : mt.userData.e0); });
   }
@@ -110,7 +117,8 @@ renderer.domElement.addEventListener('pointermove', e => {
 /* ---------- Callouts ---------- */
 const tagBox = $('tags'), leads = $('leads'), tags = {};
 for (const k of LABELS) { const d = document.createElement('div'); d.className = 'tag'; d.textContent = SUBS[k].name; tagBox.append(d); tags[k] = d; }
-const AX = [['+X', [90, 0, 0]], ['−X', [-90, 0, 0]], ['+Y', [0, 90, 0]], ['−Y front', [0, -96, 0]]].map(([t, v]) => { const d = document.createElement('div'); d.className = 'tag axis'; d.textContent = t; tagBox.append(d); return { el: d, v: new THREE.Vector3(v[0], v[2], -v[1]) }; });
+const AX = [['+X', [90, 0, 0]], ['−X', [-90, 0, 0]], ['+Y', [0, 90, 0]], ['−Y front', [0, -96, 0]]].map(([t, v]) => { const d = document.createElement('div'); d.className = 'tag axis'; d.textContent = t; tagBox.append(d); const p = new THREE.Vector3(v[0], v[2], -v[1]); return { el: d, v: p, n: p.clone().normalize() }; });
+const toCam = new THREE.Vector3();
 const tmp = new THREE.Vector3(), box3 = new THREE.Box3();
 const centerOf = sub => { box3.makeEmpty(); for (const m of bySub[sub] || []) box3.expandByObject(m); return box3.getCenter(new THREE.Vector3()); };
 function placeTags(W, H) {
@@ -135,7 +143,11 @@ function placeTags(W, H) {
     const ex = it.side === 'R' ? lx : lx + w;
     lines += `<line x1="${it.x.toFixed(1)}" y1="${it.y.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${it.ty.toFixed(1)}"/><circle cx="${it.x.toFixed(1)}" cy="${it.y.toFixed(1)}" r="2.5"/>`;
   }
-  for (const a of AX) { tmp.copy(a.v).project(camera); a.el.style.transform = tmp.z > 1 ? 'translate(-9999px,0)' : `translate(${((tmp.x + 1) / 2 * W - 12).toFixed(0)}px,${((1 - tmp.y) / 2 * H - 8).toFixed(0)}px)`; }
+  for (const a of AX) {      // only label the faces turned towards the camera
+    const facing = toCam.copy(camera.position).sub(a.v).dot(a.n) > 0;
+    tmp.copy(a.v).project(camera);
+    a.el.style.transform = !facing || tmp.z > 1 ? 'translate(-9999px,0)' : `translate(${((tmp.x + 1) / 2 * W - 12).toFixed(0)}px,${((1 - tmp.y) / 2 * H - 8).toFixed(0)}px)`;
+  }
   leads.innerHTML = lines;
 }
 
@@ -152,8 +164,14 @@ function frame() {
   st.ex += reduced ? (st.exT - st.ex) : (st.exT - st.ex) * 0.12;
   const e = st.ex * st.ex * (3 - 2 * st.ex);
   sat.setExplode(e);
-  for (const m of meshes) m.visible = st.panels || !isShell(m);
-  controls.target.y = HOME.target.y + e * 55;
+  for (const m of shell) m.visible = st.panels;
+  // the side walls fly towards the camera, so fade them as the cube opens unless they are what's selected
+  const op = st.sel === 'panels' || st.sel === 'rails' ? 1 : 1 - 0.8 * e;
+  for (const m of shell) {
+    m.castShadow = op > 0.6;
+    forMats(m, mt => { const see = op < 0.99; if (mt.transparent !== see) { mt.transparent = see; mt.depthWrite = !see; mt.needsUpdate = true; } mt.opacity = op; });
+  }
+  controls.target.y = HOME.target.y + e * 72;      // follow the middle of the stack so the top panel stays in view
   controls.update(); renderer.render(scene, camera); placeTags(W, H);
 }
 requestAnimationFrame(frame);

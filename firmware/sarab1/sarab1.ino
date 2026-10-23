@@ -28,7 +28,7 @@
 // ================= Settings you change =================
 const char* WIFI_SSID     = "YOUR_HOTSPOT_NAME";
 const char* WIFI_PASSWORD = "YOUR_HOTSPOT_PASSWORD";
-const char* COMMAND_PIN   = "change-me-2026";    // shared secret for signed telecommands from the dashboard
+const char* COMMAND_PIN   = "change-me-2026";    // command key for signed telecommands from the dashboard; use a long random phrase
 const float INA_SIGN      = -1.0;                // flip to +1.0 if charging shows as draining
 // =======================================================
 
@@ -71,7 +71,7 @@ double homeLat = 0, homeLon = 0; float baseNoise = 100, baseAgc = 58, baseJam = 
 double sumNoise = 0, sumAgc = 0, sumJam = 0, sumLat = 0, sumLon = 0;
 float lastDev = 0;
 uint32_t replayUntil = 0;
-long lastCmdTs = 0; char lastAck[40] = "";
+long lastCmdTs = 0; char lastAck[64] = "";
 
 // ---------------- Housekeeping ----------------
 float vbat = 0, ibat = 0, rollDeg = 0, pitchDeg = 0, vibG = 0, boardC = 0;
@@ -280,24 +280,36 @@ static void recalibrate() {
 }
 
 // =============== Signed telecommands ===============
+// The dashboard sends {"cmd":"replay_spoof","ts":1761210000,"sig":"<64 hex>"} on CMD_TOPIC, where sig is
+// HMAC-SHA256 of "cmd|ts" keyed with COMMAND_PIN. The answer goes out in det.ack of every packet:
+// "ok:<cmd>:<ts>" or "rejected:<cmd>:<ts>:<signature|stale|clock|unknown>".
 static bool hmacHex(const char* key, const char* msg, char out[65]) {
   uint8_t mac[32]; const mbedtls_md_info_t* info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
   if (mbedtls_md_hmac(info, (const unsigned char*)key, strlen(key), (const unsigned char*)msg, strlen(msg), mac) != 0) return false;
   for (int i = 0; i < 32; i++) sprintf(out + 2 * i, "%02x", mac[i]);
   out[64] = 0; return true;
 }
+static bool sameHex(const char* a, const char* b) {            // constant-time compare: response timing leaks nothing about the key
+  if (strlen(b) != 64) return false;
+  uint8_t diff = 0;
+  for (int i = 0; i < 64; i++) diff |= (uint8_t)(tolower((unsigned char)a[i]) ^ tolower((unsigned char)b[i]));
+  return diff == 0;
+}
 static void onCommand(char* topic, byte* payload, unsigned int len) {
   JsonDocument doc; if (deserializeJson(doc, payload, len)) return;
   const char* cmd = doc["cmd"] | ""; long ts = doc["ts"] | 0L; const char* sig = doc["sig"] | "";
+  bool known = !strcmp(cmd, "replay_spoof") || !strcmp(cmd, "recal");
   char msg[64], expect[65]; snprintf(msg, sizeof msg, "%s|%ld", cmd, ts);
   time_t now = time(nullptr);
-  bool fresh = now > 1700000000 && labs((long)now - ts) < 120 && ts > lastCmdTs;
-  bool ok = fresh && hmacHex(COMMAND_PIN, msg, expect) && strcasecmp(expect, sig) == 0;
-  if (!ok) { snprintf(lastAck, sizeof lastAck, "rejected:%s", cmd); Serial.printf("Rejected command %s\n", cmd); return; }
+  const char* why = !known ? "unknown"
+                  : now < 1700000000 ? "clock"                                  // no internet time yet, so freshness can't be checked
+                  : labs((long)now - ts) >= 120 || ts <= lastCmdTs ? "stale"    // too old, or a replay of a command already run
+                  : !hmacHex(COMMAND_PIN, msg, expect) || !sameHex(expect, sig) ? "signature" : nullptr;
+  if (why) { snprintf(lastAck, sizeof lastAck, "rejected:%s:%ld:%s", known ? cmd : "?", ts, why); Serial.printf("Rejected command (%s)\n", why); return; }
   lastCmdTs = ts;
   if (!strcmp(cmd, "replay_spoof")) replayUntil = millis() + 20000;
-  else if (!strcmp(cmd, "recal")) recalibrate();
-  snprintf(lastAck, sizeof lastAck, "ok:%s", cmd); Serial.printf("Command accepted: %s\n", cmd);
+  else recalibrate();
+  snprintf(lastAck, sizeof lastAck, "ok:%s:%ld", cmd, ts); Serial.printf("Command accepted: %s\n", cmd);
 }
 
 // =============== Network ===============

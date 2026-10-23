@@ -43,6 +43,7 @@ export class Simulator {
     this.seed = seed >>> 0;
     this.t = -121; this.seq = 4700; this.J = 0; this.Sp = 0; this.soc = 0.78;
     this.mode = 'auto'; this.state = 'NOMINAL';
+    this.replayUntil = 0; this.calUntil = 0; this.ack = null;     // set by signed commands in the test transmitter
     this.sats = [[2, 40, 62], [5, 115, 48], [7, 300, 35], [9, 200, 71], [13, 250, 22], [15, 15, 18], [18, 150, 30], [21, 330, 55], [26, 85, 12], [29, 265, 44]]
       .map(([prn, az, el]) => ({ prn, az, el, off: (this.rnd() - 0.5) * 3, base: 0, cn0: 0 }));
     this.sats.forEach(s => { s.base = 30 + 16 * Math.sin(rad(s.el)) + s.off; });
@@ -51,11 +52,17 @@ export class Simulator {
   gauss() { return (this.rnd() + this.rnd() + this.rnd() + this.rnd() - 2) * 1.732; }
   get tl() { return ((this.t % PASS) + PASS) % PASS; }
 
+  /* Run a command that passed the signature check, as the firmware does. */
+  command(cmd, now) {
+    if (cmd === 'replay_spoof') this.replayUntil = now + 20000;
+    else if (cmd === 'recal') this.calUntil = now + 45000;
+  }
+
   /* Advance one second and return the packet for that second. */
   step(now) {
     this.t++; this.seq++;
-    const tl = this.tl;
-    const tg = this.mode === 'auto' ? script(tl) : this.mode === 'jam' ? { j: 1, s: 0 } : this.mode === 'spoof' ? { j: 0, s: 1 } : { j: 0, s: 0 };
+    const tl = this.tl, replay = now < this.replayUntil, cal = now < this.calUntil;
+    const tg = replay ? { j: 0, s: 1 } : this.mode === 'auto' ? script(tl) : this.mode === 'jam' ? { j: 1, s: 0 } : this.mode === 'spoof' ? { j: 0, s: 1 } : { j: 0, s: 0 };
     this.J += (tg.j - this.J) * 0.3; if (this.J < 0.003) this.J = 0;
     this.Sp += (tg.s - this.Sp) * 0.5; if (this.Sp < 0.003) this.Sp = 0;
     const J = this.J, Sp = this.Sp;
@@ -77,8 +84,8 @@ export class Simulator {
     const agc = clamp(BASE.agc - J * 28 + Sp * 3 + this.gauss() * 0.6, 0, 100);
     const dev = Sp * 38 + Math.abs(this.gauss()) * 0.2;
     const d = detect({ drop, noise, jam, agc, sd, dev });
-    const index = Math.round(clamp(d.index + 2 + this.rnd() * 3, 0, 100));
-    this.state = classify(index, d.spoofScore, this.state);
+    const index = cal ? 0 : Math.round(clamp(d.index + 2 + this.rnd() * 3, 0, 100));
+    this.state = cal ? 'NOMINAL' : classify(index, d.spoofScore, this.state);
     const pos = trackAt(tl);
     const solar = clamp(0.80 + this.gauss() * 0.02, 0, 1.1);
     const load = 1.06 + (this.state !== 'NOMINAL' ? 0.05 : 0) + this.gauss() * 0.012;
@@ -92,7 +99,8 @@ export class Simulator {
         agc_pct: +agc.toFixed(1), noise: Math.round(noise), jam_ind: jam,
         sats: this.sats.map(s => ({ prn: s.prn, el: s.el, az: Math.round(s.az), cn0: s.cn0 >= 22 ? Math.round(s.cn0) : 0, b: +s.base.toFixed(1) }))
       },
-      det: { index, state: this.state, drop_db: +drop.toFixed(1), cn0_mean: +mean.toFixed(1), cn0_sd: +sd.toFixed(2), cn0_el_r: +r.toFixed(2), pos_dev_km: +dev.toFixed(1) },
+      det: Object.assign({ index, state: this.state, drop_db: +drop.toFixed(1), cn0_mean: +mean.toFixed(1), cn0_sd: +sd.toFixed(2), cn0_el_r: +r.toFixed(2), pos_dev_km: +dev.toFixed(1) },
+        cal ? { cal: true } : null, replay ? { test: 'replay' } : null, this.ack ? { ack: this.ack } : null),
       eps: (() => { const vbat = 3.45 + 0.75 * this.soc, net = solar - load; return { vbat: +vbat.toFixed(2), ibat_ma: Math.round(net / vbat * 1000), net_w: +net.toFixed(2), soc_pct: Math.round(this.soc * 100), solar_w: +solar.toFixed(2), load_w: +load.toFixed(2) }; })(),
       adcs: { roll_deg: +(1.4 * Math.sin(this.t / 9) + this.gauss() * 0.15).toFixed(1), pitch_deg: +(1.0 * Math.cos(this.t / 11) + this.gauss() * 0.15).toFixed(1), vib_g: +(0.018 + Math.abs(this.gauss()) * 0.004).toFixed(3) },
       therm: { board_c: +(31.2 + 0.6 * Math.sin(this.t / 40) + this.gauss() * 0.05).toFixed(1) }

@@ -2,7 +2,7 @@
    boresight (blue arrow) against straight up (dashed). The front screen mirrors live status. */
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { buildSatellite } from './sat-model.js';
+import { buildSatellite, loadSatellite } from './sat-model.js';
 
 const rad = d => d * Math.PI / 180;
 
@@ -25,11 +25,15 @@ export function createAttitude(box, { reducedMotion = false } = {}) {
   key.shadow.mapSize.set(1024, 1024); Object.assign(key.shadow.camera, { left: -140, right: 140, top: 140, bottom: -140, near: 10, far: 900 });
   scene.add(key, new THREE.HemisphereLight(0xcfe3f2, 0x1a2630, 0.35));
 
-  const sat = buildSatellite({ detail: 'high', oled: true });
+  let sat = buildSatellite({ detail: 'high', oled: true }), screen = null;
   const tilt = new THREE.Group(); sat.group.position.y = -57; tilt.add(sat.group); scene.add(tilt);
-  tilt.add(new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 63, 0), 92, 0x5eb3e8, 16, 9));
+  loadSatellite({ oled: true }).then(s => {         // swap in the detailed Blender model once it has loaded
+    tilt.remove(sat.group); s.group.position.y = -57; tilt.add(s.group); sat = s;
+    if (screen) sat.setOled(screen);
+  }).catch(e => console.warn('Detailed model unavailable:', e));
+  tilt.add(new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 63, 0), 92, 0x1d6fb3, 16, 9));
   const zen = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 63, 0), new THREE.Vector3(0, 178, 0)]),
-    new THREE.LineDashedMaterial({ color: 0x9bb0bc, dashSize: 6, gapSize: 5, transparent: true, opacity: 0.8 }));
+    new THREE.LineDashedMaterial({ color: 0x5f6b75, dashSize: 6, gapSize: 5, transparent: true, opacity: 0.75 }));
   zen.computeLineDistances(); scene.add(zen);
   const ground = new THREE.Mesh(new THREE.CircleGeometry(150, 64), new THREE.ShadowMaterial({ opacity: 0.35 }));
   ground.rotation.x = -Math.PI / 2; ground.position.y = -58; ground.receiveShadow = true; scene.add(ground);
@@ -53,7 +57,7 @@ export function createAttitude(box, { reducedMotion = false } = {}) {
   requestAnimationFrame(frame);
   return {
     update(c) { roll = c.roll || 0; pitch = c.pitch || 0; },
-    setScreen(lines) { sat.setOled(lines); },
+    setScreen(lines) { screen = lines; sat.setOled(lines); },
     destroy() { running = false; renderer.dispose(); }
   };
 }

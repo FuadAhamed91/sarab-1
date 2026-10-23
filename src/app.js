@@ -2,19 +2,21 @@
 import { Simulator, PASS } from './sim.js';
 import { Store, VERDICT } from './store.js';
 import { createLink, BROKERS } from './link.js';
+import { COMMANDS, check, ackText } from './command.js';
+import { createTelecommand } from './telecommand.js';
 import * as P from './panels.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const TRANSMIT = params.has('transmit');        // test transmitter: publishes simulated packets as the cube would
+const TRANSMIT = params.has('transmit');        // test transmitter: publishes simulated packets and obeys signed commands, as the cube would
 const LIVE_TIMEOUT = 12000;
 
 const sim = new Simulator();
 const store = new Store();
 let source = 'sim', pref = params.get('source') || 'auto', paused = false, lastTick = performance.now();
 let liveTimes = [], lastLive = null, lastLiveAt = 0, pktCount = 0, linkInfo = { state: 'connecting', up: [] };
-let globe = null, attitude = null;
+let globe = null, attitude = null, tc = null, lastCmdTs = 0;
 
 function warmSim() {          // replay the last ~3 minutes so the page opens mid-pass with history
   store.reset();
@@ -44,16 +46,18 @@ function renderChrome() {
   if (source === 'sim' && !TRANSMIT) {
     b.hidden = false;
     b.innerHTML = lastLiveAt
-      ? `<strong>Showing a simulated pass.</strong> The cube was last heard at ${P.hms(lastLiveAt)} UTC. Live data returns here automatically when it transmits again.`
+      ? `<strong>Showing a simulated pass.</strong> The cube was last heard ${P.when(lastLiveAt)}. Live data returns here automatically when it transmits again.`
       : `<strong>Showing a simulated pass over the Gulf.</strong> When the SARAB-1 prototype is powered on, this page switches to its live data automatically.`;
   } else if (TRANSMIT) {
-    b.hidden = false; b.innerHTML = '<strong>Test transmitter.</strong> This tab publishes simulated packets marked TEST, exactly as the cube would, so the live link can be checked end to end.';
+    b.hidden = false; b.innerHTML = '<strong>Test transmitter.</strong> This tab publishes simulated packets marked TEST, exactly as the cube would, and obeys signed commands, so the live link can be checked end to end.';
   } else if (stale) {
-    b.hidden = false; b.innerHTML = `<strong>No signal from the cube for ${P.dur((Date.now() - lastLiveAt) / 1000)}.</strong> Showing its last packet. Check its power and Wi-Fi hotspot.`;
+    b.hidden = false; b.innerHTML = `<strong>No signal from the cube${lastLiveAt ? ' for ' + P.dur((Date.now() - lastLiveAt) / 1000) : ''}.</strong> Showing its last packet. Check its power and Wi-Fi hotspot.`;
   } else b.hidden = true;
   document.querySelectorAll('[data-src]').forEach(btn => btn.setAttribute('aria-pressed', String(btn.dataset.src === pref)));
   const simOn = source === 'sim';
   $('scenarios').hidden = $('scenLabel').hidden = $('b-pause').hidden = !simOn;
+  document.querySelectorAll('[data-on]').forEach(li => { li.hidden = li.dataset.on !== source; });
+  if (tc) tc.update(source === 'live' && liveActive() && linkInfo.state === 'connected', store.cur && store.cur.ack);
 }
 
 /* ---------- Source selection ---------- */
@@ -63,7 +67,7 @@ function chooseSource() {
   if (TRANSMIT) { if (source !== 'sim') { source = 'sim'; warmSim(); renderAll(); } return; }
   if (want === source) return;
   source = want;
-  if (source === 'live') { store.reset(); if (lastLive) store.ingest(lastLive, lastLiveAt); }
+  if (source === 'live') { store.reset(); if (lastLive) store.ingest(lastLive, lastLiveAt || Date.now()); }
   else warmSim();
   P.renderLog(store, true); renderAll();
   $('live').textContent = source === 'live' ? 'Receiving live data from the cube.' : 'Showing simulated data.';
@@ -71,9 +75,15 @@ function chooseSource() {
 
 /* ---------- Live downlink ---------- */
 const link = createLink({
-  onPacket(pkt) {
+  onPacket(pkt, relay, retained) {
     if (pkt.src === 'SIM') return;                 // ignore anything not from the cube or the test transmitter
     if (TRANSMIT && pkt.src === 'TEST') return;     // our own echo
+    if (retained) {                                 // the relay's stored copy of the last packet: says when the cube was last heard, not that it is on
+      const t = Date.parse(pkt.utc), when = t > Date.UTC(2024, 0, 1) && t < Date.now() + 60000 ? t : 0;
+      if (lastLive && lastLiveAt >= when) return;   // keep the newer copy if the two relays hold different ones
+      lastLive = pkt; lastLiveAt = when;
+      chooseSource(); renderChrome(); return;
+    }
     const now = Date.now();
     lastLive = pkt; lastLiveAt = now; pktCount++;
     liveTimes.push(now); if (liveTimes.length > 20) liveTimes.shift();
@@ -85,8 +95,18 @@ const link = createLink({
     }
     renderChrome();
   },
-  onStatus(s) { linkInfo = s; renderChrome(); }
+  onStatus(s) { linkInfo = s; renderChrome(); },
+  onCommand: TRANSMIT ? obey : null
 });
+tc = createTelecommand({ link, transmit: TRANSMIT });
+
+/* Test transmitter only: check a command exactly as the firmware does, run it on the simulator and answer in the telemetry. */
+async function obey(msg) {
+  const why = await check(tc.key(), msg, lastCmdTs), cmd = COMMANDS[msg.cmd] ? msg.cmd : '?', ts = Math.trunc(+msg.ts) || 0;
+  if (!why) { lastCmdTs = ts; sim.command(cmd, Date.now()); }
+  sim.ack = ackText(cmd, ts, why);
+  tc.note(why ? `Rejected a command at ${P.hms(Date.now())} UTC (${why}).` : `Ran “${COMMANDS[cmd].name}” from a signed command at ${P.hms(Date.now())} UTC.`, why ? 'warn' : 'good');
+}
 
 /* ---------- Clock: one simulated packet per second ---------- */
 setInterval(() => {
@@ -126,7 +146,7 @@ new ResizeObserver(() => { if (store.cur) { P.renderTiles(store.cur, store.hist)
       globe.update({
         mode: source === 'sim' ? 'sim' : 'live',
         tl: c && c.orbit ? ((+c.orbit.tl + frac) % PASS) : 0,
-        live: source === 'live' && c ? { lat: c.fix.lat || c.pos.lat, lon: c.fix.lon || c.pos.lon } : null,
+        live: source === 'live' && c ? { lat: c.pos.lat, lon: c.pos.lon } : null,
         marks: store.marks, status: store.state, clock: Date.now()
       });
       requestAnimationFrame(tickGlobe);

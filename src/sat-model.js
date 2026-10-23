@@ -1,7 +1,10 @@
-/* Procedural 3D model of the SARAB-1 prototype, built from the same part list as the
-   Tinkercad STLs and the build cut list (hardware/build_model.py), so every view matches. */
+/* 3D model of the SARAB-1 prototype. loadSatellite() brings in the detailed model built in Blender
+   (hardware/blender/build_sarab1.py); buildSatellite() is the quick procedural one, used for the small
+   globe marker and as a fallback. Both come from the same part list as the Tinkercad STLs and the
+   cut list (hardware/build_model.py), so every view matches. */
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { PARTS } from './parts-data.js';
 
 export { PARTS };
@@ -22,7 +25,9 @@ export const SUBS = {
   pillars: { name: 'Deck pillars', sys: 'Structure', size: '6 × 6, 8 pieces', where: 'Under each deck', inside: true },
   rails: { name: 'Corner rails', sys: 'Structure', size: '8.5 × 8.5 × 113.5', where: 'Vertical edges', inside: false },
   panels: { name: 'Foam panels', sys: 'Structure', size: '5 mm board', where: 'Outer shell', inside: false,
-    info: 'Base, top and four side panels cut from black 5 mm foam board, with openings for USB, charging and the screen.' }
+    info: 'Base, top and four side panels cut from black 5 mm foam board, with openings for USB, charging and the screen.' },
+  wiring: { name: 'Wiring', sys: 'Structure', size: 'Jumper wires', where: 'Between the decks', inside: true,
+    info: 'Follows the firmware pin table: GPS to RX2/TX2 and VIN, the three I²C boards to D21/D22 and 3V3, and the battery through the INA219 to the charger.' }
 };
 PARTS.forEach(p => { const s = SUBS[subOf(p)]; if (s && !s.info && p.info) s.info = p.info; });
 
@@ -106,12 +111,13 @@ function batteryTex() {
   g.font = '400 34px "IBM Plex Mono", monospace'; g.fillText('Li-Po 103450', 256, 222);
   return srgb(new THREE.CanvasTexture(c));
 }
-function oledCanvas() { const [c, g] = canvas(512, 316); return { c, g, tex: srgb(new THREE.CanvasTexture(c)) }; }
+function oledCanvas(h = 316) { const [c, g] = canvas(512, h); return { c, g, tex: srgb(new THREE.CanvasTexture(c)) }; }
 function drawOled(o, lines) {
-  const g = o.g; g.fillStyle = '#030405'; g.fillRect(0, 0, 512, 316);
-  g.fillStyle = '#8fd8ff'; g.font = '500 44px "IBM Plex Mono", monospace'; g.fillText(lines[0] || 'SARAB-1', 26, 66);
-  g.fillStyle = '#7fc9f0'; g.font = '400 36px "IBM Plex Mono", monospace';
-  (lines.slice(1)).forEach((l, i) => g.fillText(l, 26, 140 + i * 62));
+  const g = o.g, H = o.c.height, k = H / 316;
+  g.fillStyle = '#030405'; g.fillRect(0, 0, 512, H);
+  g.fillStyle = '#8fd8ff'; g.font = `500 ${Math.round(44 * Math.min(1, k * 1.05))}px "IBM Plex Mono", monospace`; g.fillText(lines[0] || 'SARAB-1', 26, 66 * k);
+  g.fillStyle = '#7fc9f0'; g.font = `400 ${Math.round(36 * Math.min(1, k * 1.05))}px "IBM Plex Mono", monospace`;
+  (lines.slice(1)).forEach((l, i) => g.fillText(l, 26, (140 + i * 62) * k));
   o.tex.needsUpdate = true;
 }
 
@@ -241,5 +247,37 @@ export function buildSatellite({ detail = 'high', uniqueMaterials = false, oled 
     redrawText() {   /* call once web fonts have loaded */
       meshes.forEach(m => (Array.isArray(m.material) ? m.material : [m.material]).forEach(mt => { if (mt.map && mt.map.image instanceof HTMLCanvasElement) mt.map.needsUpdate = true; }));
     }
+  };
+}
+
+/* ---------- Detailed model from Blender ---------- */
+const GLB = new URL('../assets/sarab1.glb', import.meta.url).href;
+let gltfLoad = null;
+
+/* Same interface as buildSatellite. Every node carries {part, sub, layer, kind} from the Blender script;
+   the exploded view moves one group per layer, and cables hide while the cube is apart. */
+export async function loadSatellite({ uniqueMaterials = false, oled = false } = {}) {
+  const gltf = await (gltfLoad = gltfLoad || new GLTFLoader().loadAsync(GLB));
+  const group = gltf.scene.clone(true), meshes = [], bySub = {}, layers = [], cables = [];
+  const oledC = oled ? oledCanvas(256) : null;
+  if (oledC) drawOled(oledC, ['SARAB-1', 'GPS --  SATS --', 'INTERF --', 'BATT --']);
+  group.traverse(o => {
+    if (!o.isMesh) { if (o.name.startsWith('L_') && OFF[o.userData.layer]) layers.push({ o, off: toV(...OFF[o.userData.layer]) }); return; }
+    const u = o.userData.sub ? o.userData : o.parent.userData;     // a node with several materials arrives as a group of meshes
+    o.userData = { p: { id: u.part }, sub: u.sub, layer: u.layer, kind: u.kind };
+    if (uniqueMaterials) o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone();
+    if (u.kind === 'screen' && oledC) o.material = new THREE.MeshStandardMaterial({ map: oledC.tex, emissive: 0xffffff, emissiveMap: oledC.tex, emissiveIntensity: 1.1, roughness: 0.25 });
+    if (u.kind === 'cable') cables.push(o);
+    o.castShadow = o.receiveShadow = true;
+    meshes.push(o); (bySub[u.sub] = bySub[u.sub] || []).push(o);
+  });
+  return {
+    group, meshes, bySub, detailed: true,
+    setExplode(e) {
+      for (const l of layers) l.o.position.copy(l.off).multiplyScalar(e);
+      for (const c of cables) c.visible = e < 0.02;
+    },
+    setOled(lines) { if (oledC) drawOled(oledC, lines); },
+    redrawText() {}
   };
 }

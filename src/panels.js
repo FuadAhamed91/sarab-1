@@ -13,7 +13,13 @@ const sgn = (v, d = 1) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(d);
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 const rad = d => d * Math.PI / 180;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-export function dur(s) { s = Math.max(0, Math.round(s)); return s < 60 ? s + ' s' : s < 3600 ? Math.floor(s / 60) + ' min ' + (s % 60) + ' s' : Math.floor(s / 3600) + ' h ' + Math.floor(s % 3600 / 60) + ' min'; }
+export function dur(s) { s = Math.max(0, Math.round(s)); return s < 60 ? s + ' s' : s < 3600 ? Math.floor(s / 60) + ' min ' + (s % 60) + ' s' : s < 86400 ? Math.floor(s / 3600) + ' h ' + Math.floor(s % 3600 / 60) + ' min' : Math.floor(s / 86400) + ' d ' + Math.floor(s % 86400 / 3600) + ' h'; }
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export function when(ms) {   // "at 09:26:57 UTC" today, "on 22 Oct at 18:04 UTC" before that
+  const d = new Date(ms);
+  return d.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10) ? `at ${hms(ms)} UTC`
+    : `on ${d.getUTCDate()} ${MON[d.getUTCMonth()]} at ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+}
 
 /* ---------- Detection status (hero overlay) ---------- */
 function gauge(v) {
@@ -31,7 +37,7 @@ export function renderStatus(c, store, live) {
   $('gauge').innerHTML = gauge(c.index);
   $('gauge').setAttribute('aria-label', `Interference Index ${c.index} out of 100`);
   let txt, adv;
-  if (st === 'JAMMING') { txt = `Signal strength fell ${f1(c.drop)} dB on average, ${lost} of ${c.total} satellites dropped out and noise rose ${noisePct}%. A jammer is drowning out GPS ${ph}.`; adv = 'Alert: ships and aircraft here should cross-check GPS with radar and inertial navigation.'; }
+  if (st === 'JAMMING') { txt = `Signal strength fell ${f1(c.drop)} dB on average${lost ? `, ${lost} of ${c.total} satellites dropped out,` : ''} and noise rose ${noisePct}%. A jammer is drowning out GPS ${ph}.`; adv = 'Alert: ships and aircraft here should cross-check GPS with radar and inertial navigation.'; }
   else if (st === 'SPOOFING') { txt = `All ${c.n} satellites arrive at almost the same strength (spread ${f1(c.sd)} dB) and the position is ${f1(c.dev)} km off where it should be. Fake GPS signals are being broadcast ${ph}.`; adv = 'Alert: GPS positions in this area can’t be trusted, even when they look normal.'; }
   else if (st === 'SUSPECT') { txt = `Signals are ${f1(c.drop)} dB weaker than the clean baseline and noise is up ${noisePct}%. Watching for jamming ${ph}.`; adv = 'Early warning only. No action needed yet.'; }
   else { txt = `${c.n} of ${c.total} satellites tracked at healthy strength, averaging ${f1(c.mean)} dB-Hz. No interference ${ph}.`; adv = 'GPS is safe to use in this area.'; }
@@ -52,7 +58,7 @@ export function renderPass(c, live) {
     rows.push(['Over', cap(c.pl[0])], ['Position', `${f1(c.pos.lat)}°N ${f1(c.pos.lon)}°E`], ['Altitude', '525 km'], ['Speed', '7.60 km/s'],
       ['Ground contact', inView ? 'In contact · Al Ain' : nextGs ? `Al Ain in ${nextGs} s` : 'Next pass']);
   } else {
-    rows.push(['Location', 'Test bench'], ['GPS fix', `${c.fix.q} · ${c.fix.lat.toFixed(4)}°, ${c.fix.lon.toFixed(4)}°`], ['Satellites', `${c.n} tracked`], ['Packet', '#' + c.seq]);
+    rows.push(['Location', 'Test bench'], ['GPS fix', c.fix.q === 'none' ? 'No fix yet' : `${c.fix.q} · ${c.fix.lat.toFixed(4)}°, ${c.fix.lon.toFixed(4)}°`], ['Satellites', `${c.n} tracked`], ['Packet', '#' + c.seq]);
   }
   $('passInfo').innerHTML = rows.map(r => `<div><dt>${esc(r[0])}</dt><dd>${esc(r[1])}</dd></div>`).join('');
 }
@@ -99,7 +105,6 @@ export function renderBars(c) {
   const sats = c.sats.slice(0, 12), n = Math.max(1, sats.length);
   let g = '';
   for (const v of [0, 10, 20, 30, 40, 50]) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="c-grid"/><text x="${m.l - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" class="c-tick">${v}</text>`;
-  g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(22).toFixed(1)}" y2="${y(22).toFixed(1)}" class="c-lock"/><text x="${W - m.r}" y="${(y(22) - 5).toFixed(1)}" text-anchor="end" class="c-lockl">loss of lock · 22</text>`;
   const band = pw / n, bw = Math.min(30, band * 0.58);
   sats.forEach((s, i) => {
     const cx = m.l + band * (i + 0.5), x0 = cx - bw / 2, k = strength(s);
@@ -108,9 +113,10 @@ export function renderBars(c) {
     g += `<line x1="${(x0 - 4).toFixed(1)}" x2="${(x0 + bw + 4).toFixed(1)}" y1="${y(s.b).toFixed(1)}" y2="${y(s.b).toFixed(1)}" class="c-base"/>`;
     g += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" class="c-tick">G${pad(s.prn)}</text>`;
   });
+  g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(22).toFixed(1)}" y2="${y(22).toFixed(1)}" class="c-lock"/><text x="${W - m.r}" y="${(y(22) - 5).toFixed(1)}" text-anchor="end" class="c-lockl">loss of lock · 22</text>`;
   box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Signal strength of each GPS satellite against its clean baseline">${g}</svg>`;
   const lost = c.total - c.n;
-  $('barsReading').textContent = c.state === 'JAMMING' ? `Every bar fell below its baseline mark at the same moment and ${lost} dropped under the loss-of-lock line. Satellites don’t fail together; a jammer does that.`
+  $('barsReading').textContent = c.state === 'JAMMING' ? `Every bar fell below its baseline mark at the same moment${lost ? `, and ${lost} dropped under the loss-of-lock line` : ''}. Satellites don’t fail together; a jammer does that.`
     : c.state === 'SPOOFING' ? 'Every bar is the same height, whatever the satellite’s position in the sky. Real signals never line up like this.'
     : c.state === 'SUSPECT' ? 'Bars are slipping below their baseline marks across the board.'
     : 'Each bar sits on its clean baseline mark, so the receiver hears every satellite normally.';
@@ -184,7 +190,7 @@ export function renderHK(c) {
 let drawnVer = -1;
 export function renderLog(store, force = false) {
   if (!force && drawnVer === store.evVer) return; drawnVer = store.evVer;
-  const rows = store.events.slice(0, 8).map(e => { const ev = EVENTS[e.kind]; return `<tr><td class="mono">${hms(e.t)}</td><td><span class="ev ev-${ev.cls}">${ev.name}</span></td><td class="mono">${e.index}</td><td>${esc(e.area)}</td><td class="mean">${ev.mean}</td></tr>`; }).join('');
+  const rows = store.events.slice(0, 8).map(e => { const ev = EVENTS[e.kind]; return `<tr><td class="mono">${hms(e.t)}</td><td><span class="ev ev-${ev.cls}">${ev.name}</span></td><td class="mono">${e.index}</td><td>${esc(e.area)}</td><td class="mean">${esc(e.mean || ev.mean)}</td></tr>`; }).join('');
   $('log').innerHTML = rows || '<tr><td colspan="5" class="empty">No events yet. Alerts appear here when the index crosses a threshold.</td></tr>';
   $('logMeta').textContent = store.events.length + ' events · newest first';
 }

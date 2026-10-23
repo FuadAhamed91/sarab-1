@@ -39,7 +39,7 @@ export function placeOf(lat, lon) {
 
 /* Map labels for the 3D view: [text, lat, lon, style]. */
 export const MAP_LABELS = [
-  ['Arabian Gulf', 27.0, 51.6, 'sea'], ['Gulf of Oman', 24.3, 58.8, 'sea'], ['Strait of Hormuz', 26.95, 57.1, 'sea-s'],
+  ['Arabian Gulf', 27.0, 51.6, 'sea'], ['Gulf of Oman', 25.0, 59.6, 'sea'], ['Strait of Hormuz', 26.95, 57.1, 'sea-s'],
   ['Arabian Sea', 20.0, 62.5, 'sea'], ['IRAN', 30.4, 54.5, 'cty'], ['UAE', 23.35, 54.0, 'cty'], ['OMAN', 21.2, 56.9, 'cty'],
   ['SAUDI ARABIA', 24.2, 46.6, 'cty'], ['QATAR', 25.35, 51.2, 'cty-s'],
   ['Abu Dhabi', 24.47, 54.37, 'city'], ['Dubai', 25.2, 55.27, 'city'], ['Khor Fakkan', 25.35, 56.36, 'city']
